@@ -1,151 +1,109 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import random
 import json
-import os
+from datetime import datetime
 
-# --- Настройки ---
-HISTORY_FILE = "tasks.json"
-DEFAULT_TASKS = [
-    {"text": "Прочитать статью", "type": "учёба"},
-    {"text": "Сделать зарядку", "type": "спорт"},
-    {"text": "Написать отчёт", "type": "работа"},
-    {"text": "Посмотреть обучающее видео", "type": "учёба"},
-    {"text": "Разобрать почту", "type": "работа"},
-    {"text": "Погулять на свежем воздухе", "type": "отдых"},
-]
+DATA_FILE = 'trainings.json'
 
-class TaskGeneratorApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Генератор случайных задач")
-        self.root.geometry("500x500")
-        
-        # Загрузка данных
-        self.tasks = self.load_tasks()
-        
-        # --- Виджеты ---
-        # Фильтр по типу
-        self.filter_var = tk.StringVar(value="все")
-        filter_frame = tk.Frame(root)
-        filter_frame.pack(pady=5, fill=tk.X)
-        
-        tk.Label(filter_frame, text="Фильтр по типу:").pack(side=tk.LEFT)
-        filter_options = ["все"] + sorted(set(task["type"] for task in self.tasks))
-        ttk.Combobox(filter_frame, textvariable=self.filter_var, 
-                    values=filter_options, state="readonly", width=15).pack(side=tk.LEFT, padx=5)
-        self.filter_var.trace_add("write", self.update_history_list)
+def load_data():
+    try:
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
 
-        # Кнопка генерации
-        tk.Button(root, text="Сгенерировать задачу", 
-                 bg="#4CAF50", fg="white", command=self.generate_task).pack(pady=10, fill=tk.X)
+def save_data(data):
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-        # Поле текущей задачи
-        self.current_task_label = tk.Label(root, text="Ваша задача появится здесь", 
-                                          font=('Arial', 12, 'bold'), wraplength=400)
-        self.current_task_label.pack(pady=10)
+def add_training():
+    date = entry_date.get()
+    training_type = combo_type.get()
+    duration = entry_duration.get()
 
-        # История задач
-        history_frame = tk.Frame(root)
-        history_frame.pack(pady=10, fill=tk.BOTH, expand=True)
-        
-        tk.Label(history_frame, text="История задач:", font=('Arial', 10, 'bold')).pack(anchor='w')
-        self.history_listbox = tk.Listbox(history_frame, height=10)
-        self.history_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        scrollbar = tk.Scrollbar(history_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        self.history_listbox.config(yscrollcommand=scrollbar.set)
-        scrollbar.config(command=self.history_listbox.yview)
-        
-        # Кнопки управления
-        btn_frame = tk.Frame(root)
-        btn_frame.pack(pady=5, fill=tk.X)
-        
-        # Добавление новой задачи
-        add_frame = tk.Frame(btn_frame)
-        add_frame.pack(fill=tk.X, pady=5)
-        
-        self.new_task_entry = tk.Entry(add_frame, width=30)
-        self.new_task_entry.pack(side=tk.LEFT, expand=True)
-        
-        self.new_task_type = ttk.Combobox(add_frame, values=["учёба", "работа", "спорт", "отдых"], 
-                                        state="readonly", width=10)
-        self.new_task_type.set("работа")
-        self.new_task_type.pack(side=tk.LEFT, padx=5)
-        
-        tk.Button(add_frame, text="Добавить в список", 
-                 command=self.add_new_task).pack(side=tk.LEFT)
+    try:
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        messagebox.showerror('Ошибка', 'Дата должна быть в формате ГГГГ-ММ-ДД')
+        return
 
-    def load_tasks(self):
-        """Загрузка задач из JSON или создание файла с дефолтными задачами."""
-        if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                try:
-                    return json.load(f)
-                except json.JSONDecodeError:
-                    return DEFAULT_TASKS.copy()
-        
-        # Если файла нет, создаем его с дефолтными задачами
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(DEFAULT_TASKS.copy(), f, ensure_ascii=False, indent=2)
-            
-        return DEFAULT_TASKS.copy()
+    if not duration.replace('.', '', 1).isdigit() or float(duration) <= 0:
+        messagebox.showerror('Ошибка', 'Длительность должна быть положительным числом')
+        return
 
-    def save_tasks(self):
-        """Сохранение списка задач в JSON."""
-        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.tasks, f, ensure_ascii=False, indent=2)
+    training = {'date': date, 'type': training_type, 'duration': float(duration)}
+    data.append(training)
+    save_data(data)
+    update_table()
+    clear_inputs()
 
-    def update_history_list(self, *args):
-        """Обновление виджета списка истории с учетом фильтра."""
-        self.history_listbox.delete(0, tk.END)
-        
-        filter_type = self.filter_var.get()
-        
-        for task in reversed(self.tasks): # Показываем новые задачи сверху
-            if filter_type == "все" or task["type"] == filter_type:
-                self.history_listbox.insert(tk.END, f"{task['text']} ({task['type']})")
+def update_table(filter_type=None, filter_date=None):
+    for i in tree.get_children():
+        tree.delete(i)
+    for t in data:
+        if filter_type and t['type'] != filter_type:
+            continue
+        if filter_date and t['date'] != filter_date:
+            continue
+        tree.insert('', 'end', values=(t['date'], t['type'], t['duration']))
 
-    def generate_task(self):
-        """Генерация случайной задачи."""
-        if not self.tasks:
-            messagebox.showwarning("Предупреждение", "Список задач пуст! Добавьте новые задачи.")
-            return
+def filter_trainings():
+    t_type = combo_filter_type.get() if combo_filter_type.get() else None
+    t_date = entry_filter_date.get() if entry_filter_date.get() else None
+    update_table(t_type, t_date)
 
-        selected_task = random.choice(self.tasks)
-        
-        # Отображаем задачу в главном лейбле
-        self.current_task_label.config(
-            text=f"Задача: {selected_task['text']}\nТип: {selected_task['type'].capitalize()}",
-            bg="#f0f0f0", relief="solid"
-        )
+def clear_inputs():
+    entry_date.delete(0, tk.END)
+    combo_type.set('')
+    entry_duration.delete(0, tk.END)
 
-    def add_new_task(self):
-        """Добавление новой задачи с валидацией."""
-        task_text = self.new_task_entry.get().strip()
-        
-        if not task_text:
-            messagebox.showerror("Ошибка", "Поле задачи не может быть пустым!")
-            return
+data = load_data()
 
-        task_type = self.new_task_type.get()
-        
-        new_task = {"text": task_text, "type": task_type}
-        
-        # Добавляем в начало списка (как самую новую) и сохраняем
-        self.tasks.insert(0, new_task) 
-        self.save_tasks()
-        
-        # Обновляем интерфейс
-        self.update_history_list()
-        
-        # Очищаем поля ввода
-        self.new_task_entry.delete(0, tk.END)
-        
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = TaskGeneratorApp(root)
-    app.update_history_list() # Первоначальная загрузка истории
-    root.mainloop()
+root = tk.Tk()
+root.title('Training Planner')
+root.geometry('800x500')
+
+tab_control = ttk.Notebook(root)
+tab_main = ttk.Frame(tab_control)
+tab_filter = ttk.Frame(tab_control)
+tab_control.add(tab_main, text='Добавить тренировку')
+tab_control.add(tab_filter, text='Фильтр')
+tab_control.pack(expand=1, fill='both')
+
+# Вкладка "Добавить тренировку"
+tk.Label(tab_main, text='Дата (ГГГГ-ММ-ДД):').grid(row=0, column=0, padx=5, pady=5)
+entry_date = tk.Entry(tab_main)
+entry_date.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_main, text='Тип тренировки:').grid(row=1, column=0, padx=5, pady=5)
+combo_type = ttk.Combobox(tab_main, values=['Кардио', 'Силовая', 'Растяжка', 'Йога', 'Прочее'])
+combo_type.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Label(tab_main, text='Длительность (мин):').grid(row=2, column=0, padx=5, pady=5)
+entry_duration = tk.Entry(tab_main)
+entry_duration.grid(row=2, column=1, padx=5, pady=5)
+
+btn_add = tk.Button(tab_main, text='Добавить тренировку', command=add_training)
+btn_add.grid(row=3, column=0, columnspan=2, pady=10)
+
+tree = ttk.Treeview(tab_main, columns=('Дата', 'Тип', 'Длительность'), show='headings')
+tree.heading('Дата', text='Дата')
+tree.heading('Тип', text='Тип')
+tree.heading('Длительность', text='Длительность (мин)')
+tree.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
+
+# Вкладка "Фильтр"
+tk.Label(tab_filter, text='Тип тренировки:').grid(row=0, column=0, padx=5, pady=5)
+combo_filter_type = ttk.Combobox(tab_filter, values=['Все', 'Кардио', 'Силовая', 'Растяжка', 'Йога', 'Прочее'])
+combo_filter_type.set('Все')
+combo_filter_type.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_filter, text='Дата (ГГГГ-ММ-ДД):').grid(row=1, column=0, padx=5, pady=5)
+entry_filter_date = tk.Entry(tab_filter)
+entry_filter_date.grid(row=1, column=1, padx=5, pady=5)
+
+btn_filter = tk.Button(tab_filter, text='Применить фильтр', command=filter_trainings)
+btn_filter.grid(row=2, column=0, columnspan=2, pady=10)
+
+update_table()
+root.mainloop()
